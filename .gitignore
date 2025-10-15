@@ -1,0 +1,6 @@
+/cmake-build-debug/
+/cmake-build-debug-event-trace/
+/.idea/vcs.xml
+.vs
+build
+__pycache__
