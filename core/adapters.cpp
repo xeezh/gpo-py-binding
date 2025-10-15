@@ -149,7 +149,7 @@ static Result run_aco_short_impl(const Matrix& m, const Params& p) {
     std::size_t end = p.value("end", (std::size_t)std::max(1u, m.GetRows()) - 1);
 
     aco_short_way::AntColonyOptimization aco(const_cast<Matrix&>(m), start, end);
-    auto best = aco.SolveSalesmansProblem();
+    auto best = aco.SolveShortestPath();
 
     Result r;
     r.algorithm = "aco_short"; r.problem = "shortest_path";

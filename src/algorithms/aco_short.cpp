@@ -105,6 +105,11 @@ void aco_short_way::Ant::MakeChoice(const Matrix& g, const Matrix& p, double a, 
         summary_wish += wish[i];
     }
 
+    if (summary_wish <= 0.0) {
+        can_continue = false;
+        return;
+    }
+
     // Подсчет вероятностей перехода
     std::vector<double> probability(neighbor_vertexes.size());
     for (std::size_t i = 0; i < neighbor_vertexes.size(); ++i) {
@@ -130,34 +135,65 @@ void aco_short_way::Ant::MakeChoice(const Matrix& g, const Matrix& p, double a, 
 }
 
 aco_short_way::AntPath aco_short_way::AntColonyOptimization::SolveSalesmansProblem() {
+    // Сколько итераций подряд можно без улучшений лучшего решения
     constexpr std::size_t kMaxIterationsWithoutImprovement = 200;
-    const std::size_t kVertexesCount = graph_->GetRows();
+
+    const std::size_t n = graph_->GetRows();
     AntPath best_path;
-    best_path.distance = 1e9;
+    best_path.distance = std::numeric_limits<double>::infinity();
 
-    for (std::atomic<std::size_t> counter(0); counter < kMaxIterationsWithoutImprovement; ++counter) {
-        Matrix local_pheromone_update(kVertexesCount, kVertexesCount);
+    std::size_t no_improve = 0;
 
-        for (auto &ant : ants_) {
+    while (no_improve < kMaxIterationsWithoutImprovement) {
+        // Локальная матрица прироста феромона за итерацию
+        Matrix local_pheromone_update(n, n);  // по умолчанию заполнится нулями
+
+        // Прогоняем всех муравьёв
+        for (auto& ant : ants_) {
+            // Сброс состояния муравья
             ant.visited_mask = 0;
             ant.can_continue = true;
-            ant.current_location = start_location_; // Используем начальную точку
+            ant.current_location = start_location_;
             ant.path.vertices.clear();
-            ant.path.distance = 0;
+            ant.path.distance = 0.0;
 
+            // Двигаем муравья, пока он может идти
             while (ant.can_continue) {
                 ant.MakeChoice(*graph_, *pheromone_, kAlpha_, kBeta_);
             }
 
-            if (ant.path.vertices.size() == kVertexesCount && best_path.distance > ant.path.distance) {
-                best_path = std::move(ant.path);
-                counter.store(0); // Сброс счетчика итераций без улучшений
-                std::cout << "Current best distance: " << best_path.distance << "\n";
-            }
-        }
+            // Если муравей дошёл до цели — учитываем этот путь
+            if (!ant.path.vertices.empty() &&
+                ant.path.vertices.back() == end_location_ &&
+                std::isfinite(ant.path.distance))
+            {
+                // Обновление лучшего решения
+                if (ant.path.distance < best_path.distance) {
+                    best_path = ant.path;
+                    no_improve = 0;  // сброс стагнации
+                }
 
-        UpdateGlobalPheromone(local_pheromone_update); // Глобальное обновление феромонов
-    }
+                // Локальный депозит феромона по рёбрам маршрута
+                // Чем короче путь — тем больше вклад
+                const double deposit = kQ_ / std::max(1.0, ant.path.distance);
+                for (std::size_t i = 0; i + 1 < ant.path.vertices.size(); ++i) {
+                    const auto u = ant.path.vertices[i];
+                    const auto v = ant.path.vertices[i + 1];
+                    // Защита индексов (на всякий случай)
+                    if (u < n && v < n) {
+                        local_pheromone_update[u][v] += deposit;
+                        local_pheromone_update[v][u] += deposit; // если граф неориентированный
+                    }
+                }
+            }
+        } // for ants
+
+        // Глобальное обновление феромонов: испарение + депозит
+        UpdateGlobalPheromone(local_pheromone_update);
+
+        // Если в эту итерацию улучшения не было — считаем стагнацию
+        ++no_improve;
+    } // while
 
     return best_path;
 }

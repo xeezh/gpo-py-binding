@@ -42,7 +42,7 @@ namespace aco_short_way {
         ~AntColonyOptimization() = default;
 
         // Возвращает самый выгодный путь
-        AntPath SolveSalesmansProblem();
+        AntPath SolveShortestPath();
 
     private:
         // Определяются и подбираются опытным путем
